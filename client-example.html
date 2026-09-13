@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Research Agent — test client</title>
+<style>
+  body { background:#0a0e10; color:#e8f1f0; font-family:ui-monospace,'SF Mono',monospace; padding:20px; }
+  #log { white-space:pre-wrap; background:#050202; border:1px solid #333; border-radius:8px; padding:10px; height:340px; overflow-y:auto; margin-top:12px; }
+  .line.tool { color:#ffb199; }
+  .line.log { color:#9fd6a0; }
+  .line.error { color:#ff5a5a; }
+  input, button { font-family:inherit; padding:8px; border-radius:6px; border:1px solid #333; background:#111; color:#eee; }
+  input { width:60%; }
+  img { max-width:100%; border:1px solid #333; margin-top:10px; border-radius:6px; }
+</style>
+</head>
+<body>
+  <h2>Research Agent — test client</h2>
+  <p>Connects to <code>ws://localhost:8787</code>. Type a task and watch it work.</p>
+  <input id="task" placeholder="e.g. Find the current top story on Hacker News and summarize it">
+  <button id="go">Run</button>
+  <button id="stop">Stop</button>
+  <div id="log"></div>
+  <div id="shots"></div>
+
+<script>
+  const ws = new WebSocket('ws://localhost:8787');
+  const logEl = document.getElementById('log');
+  const shotsEl = document.getElementById('shots');
+
+  function line(cls, text) {
+    const d = document.createElement('div');
+    d.className = 'line ' + cls;
+    d.textContent = text;
+    logEl.appendChild(d);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  ws.onopen = () => line('log', 'Connected.');
+  ws.onclose = () => line('error', 'Disconnected.');
+  ws.onmessage = (evt) => {
+    const msg = JSON.parse(evt.data);
+    switch (msg.type) {
+      case 'log': line('log', msg.text); break;
+      case 'tool_call': line('tool', `→ ${msg.name}(${JSON.stringify(msg.input)})`); break;
+      case 'tab': line('tool', `  tab: ${msg.title} — ${msg.url}`); break;
+      case 'file_saved': line('tool', `  saved file: ${msg.filename}`); break;
+      case 'screenshot': {
+        const img = document.createElement('img');
+        img.src = msg.dataUrl;
+        shotsEl.prepend(img);
+        break;
+      }
+      case 'error': line('error', msg.text); break;
+      case 'done': line('log', '--- done ---'); break;
+    }
+  };
+
+  document.getElementById('go').onclick = () => {
+    const task = document.getElementById('task').value.trim();
+    if (!task) return;
+    logEl.innerHTML = ''; shotsEl.innerHTML = '';
+    ws.send(JSON.stringify({ type: 'task', task }));
+  };
+  document.getElementById('stop').onclick = () => ws.send(JSON.stringify({ type: 'stop' }));
+</script>
+</body>
+</html>
